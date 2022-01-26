@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from math import sqrt
-# from math import sqr
-# Part MF A
+
+######################### Part A Start ##########################
 def Wi(AT, DT):
 	T = [0]*10
 	Q = 0
@@ -38,31 +38,34 @@ def avgW(AT, DT):
 
 ######################### Part B Start ##########################
 
-def COV(X,Y, Xbar):
-	# print("COV")
+def COV(X,Y, n):
 	cov = 0
-	for i in range(10):
-		cov += (X[i] - Xbar) * (Y[i] - 10)
-	# print("cov: ", cov)
-	return cov
-	#E[(X - E[X])(Y - E[Y])] = E[XY] - E[X]E[Y]
-	#E[Y] = p/mu = 10
-	#E[X] = theta
-	#
-
-def VAR(X, EX):
-	# print("VAR")
-	variance = 0
-	for i in range(10):
-		variance += (X[i] - EX)*(X[i] - EX)
+	Xbar = sum(X)/(n)
+	Ybar = sum(Y)/(n)
+	for i in range(n):
+		cov += (X[i] - Xbar) * (Y[i] - Ybar)
+	cov = (1/(n-1)) * cov
 	
+	return cov
+	
+
+def VAR(Y, n):
+	variance = 0
+	Ybarn = (1/n) * sum(Y)
+	for i in range(n):
+		variance += (Y[i] - Ybarn)*(Y[i] - Ybarn)
+	
+	variance = (1/(n-1)) * variance
+
 	return variance
 
 
-def cstar(X,Y, Xbar):
-	# print("c*")
-	
-	c = COV(X,Y, Xbar)/VAR(Y, 10)
+def cstar(X,Y,n):
+	if(n == 1):
+		return 0
+	cov = COV(X,Y,n)
+	variance = VAR(Y,n)
+	c = (-1) * cov / variance
 	return c
 
 def S(DT):
@@ -115,6 +118,8 @@ def Norm(arr):
 	return nArr	
 	
 def Sn(x, Xbar, n):
+	if(n == 1):
+		return 0
 	s = 0
 	for i in range(n):
 		s += (x[i]-Xbar) * (x[i]-Xbar)
@@ -126,31 +131,25 @@ def Sn(x, Xbar, n):
 if __name__ == "__main__":
 	
 	n=200
-	Wn = 0
 	p=10
 	mu=1
-	Y = 0
 	lam = 2
-	Q = 0
 	L = 0
+	Wn = []
+	Y = []
+	Q = []
 	onea = []
 	oneb = []
 	onec = []
 	oned = []
 	simulation = []
-	Ws = []
-	Ys = []
-	Zs = []
-	Ls = []
-	Hci = []
-	Lci = []
-	Wnorm = []
 	Werror = []
 	Zerror = []
 	Herror = []
 	Lerror = []
 	Wfound = False
 	Zfound = False
+	Hfound = False
 	Lfound = False
 	for i in range(n):
 		#Arrival Time
@@ -164,80 +163,72 @@ if __name__ == "__main__":
 		#Part A
 		X = Wi(AT, DT)
 		
-		Wn += sum(X)
-		Ws.append(sum(X))
-		Wbar = Wn/(i+1)
+		Wn.append(sum(X))
+		Wbar = sum(Wn)/(i+1)
 		onea.append(Wbar)
-		if(i == 0):
-			Werror.append(0)
-		else:
-			Werror.append(1.64 * Sn(Ws, Wbar, i+1)/sqrt(i+1))
-			if Wbar+Werror[i] < (Wbar*1.1) and Wfound==False:
-				print("1a min: ", i)
-				Wfound=True
+		avgWbar = sum(onea)/(i+1)
+		
+		Werror.append(1.64 * Sn(onea, avgWbar, i+1)/sqrt(i+1))
+		if i>0 and Wbar+Werror[i] < (Wbar*1.1) and Wbar-Werror[i] > (Wbar*0.9) and Wfound==False:
+			print("1a min: ", i)
+			Wfound=True
 
 		#Part B
-		Y += S(DT)
-		Ys.append(sum(DT))
-		Ybar = Y/(i+1)
+		Y.append(sum(DT))
+		Ybar = sum(Y)/(i+1)
 		EofY = p/mu
-		Zbar = Wbar + cstar(X,DT, Wbar) * (Ybar - EofY)
+		Zbar = Wbar + cstar(Wn,Y, i+1) * (Ybar - EofY)
 		oneb.append(Zbar)
-		if(i == 0):
-			Zerror.append(0)
-		else:
-			Zerror.append(1.64 * Sn(Ys, Ybar, i+1)/sqrt(i+1))
-			if Zbar+Zerror[i] < (Zbar*1.1) and Zfound==False:
-				print("1b min: ", i)
-				Zfound=True
+		avgZbar = sum(oneb)/(i+1)
+		Zerror.append(1.64 * Sn(oneb, avgZbar, i+1)/sqrt(i+1))
+		if i > 0 and Zbar+Zerror[i] < (Zbar*1.1) and Zbar-Zerror[i] > (Zbar*0.9) and Zfound==False:
+			print("1b min: ", i)
+			Zfound=True
 
 
 		#Part C
-		Q += sum(DT) - Ik(AT)
-		Qbar = Q/(i+1)
+		Q.append(sum(DT) - Ik(AT))
+		Qbar = sum(Q)/(i+1)
 		EofQ = p/mu - (p-1)/lam
-		Hbar = Wbar + cstar(X,DT, Wbar) * (Qbar - EofQ)
+		Hbar = Wbar + cstar(Wn,Q, i+1) * (Qbar - EofQ)
 		onec.append(Hbar)
-		Hci.append(1.64 * np.std(onec)/sqrt(i+1))
+		avgHbar = sum(onec)/(i+1) 
+		Herror.append(1.64 * Sn(onec, avgHbar, i+1)/sqrt(i+1))
+		if i > 0 and Hbar+Herror[i] < (Hbar*1.1) and Hbar-Herror[i] > (Hbar*0.9) and Hfound==False:
+			print("1c min: ", i)
+			Hfound=True
 
 
 		#Part D
 		Ni = N(AT, DT, X)
 		Li = EofTgivenN(Ni, mu)
 		L += Li
-		Ls.append(Li)
 		Lbar = L/(i+1)
 		oned.append(Lbar)
-		Lci.append(1.64 * np.std(oned)/sqrt(i+1))
-		if(i == 0):
-			Lerror.append(0)
-		else:
-			Lerror.append(1.64 * Sn(Ls, Lbar, i+1)/sqrt(i+1))
-			if Lbar+Lerror[i] < (Lbar*1.1) and Lfound==False:
-				print("1d min: ", i)
-				Lfound=True
+		avgLbar = sum(oned)/(i+1)
+		
+		Lerror.append(1.64 * Sn(oned, avgLbar, i+1)/sqrt(i+1))
+		if i > 0 and Lbar+Lerror[i] < (Lbar*1.1) and Lbar-Lerror[i] > (Lbar*0.9) and Lfound==False:
+			print("1d min: ", i)
+			Lfound=True
 
 		simulation.append(i)
 
-	# print(Werror[5], Werror[1999])
+	print(Zerror[5], Zerror[n-1])
+
+	#Make Graphs
 	start = 0
-	end = 2000
-	# figure, axis = plt.subplots(2, 1)
+	end = n
 	plt.title("90% Confidence")
 	plt.xlabel("n")
 	plt.ylabel("Target")
-	# underline = np.subtract(np.array(onea),np.array(Wci))
-	# overline = (onea + Wci)
 	plt.errorbar(simulation[start:end], onea[start:end], yerr = Werror[start:end], color='b', label="Wbar")
-	# plt.errorbar(simulation[start:end], oneb[start:end], yerr = Zerror[start:end], color='orange', label="Zbar")
-	plt.plot(simulation[start:end], oneb[start:end], 'orange', label="Zbar")
-	plt.plot(simulation[start:end], onec[start:end], 'g', label="Hbar")
+	plt.errorbar(simulation[start:end], oneb[start:end], yerr = Zerror[start:end], color='orange', label="Zbar")
+	plt.errorbar(simulation[start:end], onec[start:end], yerr = Herror[start:end], color='g', label="Hbar")
 	plt.errorbar(simulation[start:end], oned[start:end], yerr = Lerror[start:end], color='r', label="Lbar")
 	plt.legend()
 		
 	plt.show()
-	# plt.plot(simulation[start:end], onea[start:end], 'b', label="Wbar")
-	# axis[0].fill_between(underline[start:end], overline[start:end],'b')
 	plt.title("Estimations")
 	plt.xlabel("n")
 	plt.ylabel("Target")
@@ -248,8 +239,3 @@ if __name__ == "__main__":
 	plt.legend()
 		
 	plt.show()
-
-	# print("Wbar: ", Wbar)
-	# print("Zbar: ", Zbar)
-	# print("Hbar: ", Hbar)
-	# print("Lbar: ", Lbar)
