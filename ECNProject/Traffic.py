@@ -4,6 +4,8 @@ from multiprocessing import Process, Value, Manager
 import matplotlib.pyplot as plt
 import os
 from math import sqrt
+import sys
+
 class server:
 	def __init__(self, ping, threshold):
 		self.ping = ping 	#number of packets to process per second
@@ -11,40 +13,47 @@ class server:
 		self.threshold = threshold
 		# self.maxlength = maxlength.value
 	
-	def listen(self, throttle1, clientqueue, serverqueue):
+	def listen(self, throttle, clientqueuearr, serverqueuearr, numClients):
+		print("server is listening")
 		#Continue listening while the client is still transmitting or the server is still processesing
 		random.seed(os.getpid())
-		while (clientqueue.empty() == False or serverqueue.empty() == False):
+		while (all(clientqueue.empty() for clientqueue in clientqueuearr) != True or all(serverqueue.empty() for serverqueue in serverqueuearr) != True):
+			# print("Client or server queues not empty")
 			#While server is still processing
-			while (serverqueue.empty() == False):
-				#If the queue size is over the threshold, send the ECN
-				if(serverqueue.qsize() >= self.threshold.value):
-					throttle1.value = 1
-				else:
-					throttle1.value = 0
-				#Get packet from the server queue
-				packet = serverqueue.get_nowait()
-				# print("Processed Packet: ", packet)
-				# print("\n")
-				time.sleep(random.poisson(lam=self.rate))
-				# time.sleep(self.rate)
+			while (all(serverqueue.empty() for serverqueue in serverqueuearr) != True):
+				# print("Server queues not empty")
+				for i in range(numClients):
+					if(serverqueuearr[i].empty() != True):
+						#If the queue size is over the threshold, send the ECN
+						if(serverqueuearr[i].qsize() >= self.threshold.value):
+							throttle[i].value = 1
+						else:
+							throttle[i].value = 0
+						#Get packet from the server queue
+						packet = serverqueuearr[i].get_nowait()
+						# print("Processed Packet: ", packet)
+						# print("\n")
+						time.sleep(random.poisson(lam=self.rate))
+						# time.sleep(self.rate)
 		print("Server is done processing")
 			
 
+
 class client:
-	def __init__(self, ping, throttle, name, numPackets):
+	def __init__(self, ping, throttle, numPackets):
 		self.ping = ping 	#number of packets to send per second
 		self.rate = 1/ping	#Sleep time between each packet	
 		self.throttle = throttle
-		self.name = name
+		# self.name = name
 		self.numPackets = numPackets
 		self.packets_dropped = 0
 
-	def transmit(self, maxlength, clientqueue, serverqueue, dropped1):
+	def transmit(self, maxlength, clientqueue, serverqueue, dropped):
 		print("Transmission started")
 		pps = self.ping # Packets Per Second
 		#Continue transmitting until all packets have been sent
-		random.seed(os.getpid())
+		pid = os.getpid()
+		random.seed(pid)
 		while clientqueue.empty() != True:
 			#If the server is at maximum capacity, do not send packet and count as dropped packet
 			if(serverqueue.qsize() >= maxlength.value):
@@ -53,24 +62,29 @@ class client:
 				#get packet from client queue
 				packet = clientqueue.get_nowait()
 				#place packet into the server queue
+				# print(packet)
 				serverqueue.put(packet)
 
 			#If the throttle value is set to 0, continue with slow start algorithm
 			if(self.throttle.value == 0):	
 				#Sleep before sending next packet
+				# print("PPS: ", pps)
 				time.sleep(random.poisson(lam=self.rate))
 				pps = min(pps*2, self.ping)
 				self.rate = 1/pps
 
 			#If throttle value is set to 1, send at half the rate
 			else:
+				# print("PID: ", pid, " PPS: ", pps)
 				pps = max(pps/2, 0.0005)
 				self.rate = 1/pps
 				time.sleep(random.poisson(lam=self.rate))
 
-		print("PPS: ", pps)
-		dropped1.value = self.packets_dropped
-	
+		# print("PID: ", pid, " Final PPS: ", pps)
+		dropped.value = self.packets_dropped
+
+
+
 def Sn(x, Xbar, n):
 	if(n == 1):
 		return 0
@@ -81,46 +95,87 @@ def Sn(x, Xbar, n):
 	s = sqrt(s)
 	return s
 
-def Traffic(numPackets):
+
+
+def Traffic(numPackets, numClients):
 	manager = Manager()
 	#Set up client specific values
-	throttle1 = manager.Value('i', 0) 	#Shared throttle value
-	dropped1 = manager.Value('i', 0)	#Shared number of dropped packets
-	clientqueue = manager.Queue()
-	for i in range(numPackets):
-		clientqueue.put(i)
+	clientqueuearr = []
+	throttlearr = []
+	droppedarr = []
+	clientarr = []
+	serverqueuearr = []
+	for i in range(numClients):
+		clientqueuearr.append(manager.Queue())
+		for j in range(numPackets):
+			clientqueuearr[i].put(j)
+		
+		throttlearr.append(manager.Value('i', 0))
+		droppedarr.append(manager.Value('i', 0))
+		clientarr.append(client(20, throttlearr[i], numPackets))
+		serverqueuearr.append(manager.Queue())
+
+	# throttle1 = manager.Value('i', 0) 	#Shared throttle value
+	# throttle2 = manager.Value('i', 0)
+	# dropped1 = manager.Value('i', 0)	#Shared number of dropped packets
+	# clientqueue1 = manager.Queue()
+	# clientqueue2 = manager.Queue()
 	
-	#create client
-	c1 = client(20, throttle1, "C1", numPackets)
+	# clientqueuearr = [clientqueue1, clientqueue2]
+	# throttlearr = [throttle1, throttle2]
+
+
+	# for i in range(numPackets):
+	# 	clientqueue1.put(i)
+	# 	clientqueue2.put(i)
+	
+	
+
+	
 
 
 	#Set up server specific values
-	serverqueue = manager.Queue()
+	# serverqueue1 = manager.Queue()
+	# serverqueue2 = manager.Queue()
+
+	# serverqueuearr = []
+	# serverqueuearr.append(serverqueue1)
+	# serverqueuearr.append(serverqueue2)
+	
+	
 	threshold = manager.Value('i', 14)
 	maxlength = manager.Value('i', 30)
 
 	#create server
-	s1 = server(16, threshold)
+	s1 = server(32, threshold)
 
-	server1 = Process(target=s1.listen, args=(throttle1, clientqueue, serverqueue))
+	#Create processes
+	server1 = Process(target=s1.listen, args=(throttlearr, clientqueuearr, serverqueuearr, numClients))
+	cProcessArr = []
+	for i in range(numClients):
+		cProcessArr.append(Process(target=clientarr[i].transmit, args=(maxlength, clientqueuearr[i], serverqueuearr[i], droppedarr[i])))
 	server1.start()
 	startTime = time.time()
-	client1 = Process(target=c1.transmit, args=(maxlength, clientqueue, serverqueue, dropped1))
-	client1.start()
-	client1.join()
+	for i in range(numClients):
+		cProcessArr[i].start()
+	for i in range(numClients):
+		cProcessArr[i].join()
+	
 	server1.join()
 
-	# while True:
-	# 	if(serverqueue.empty() and clientqueue.empty()):
-	# 		break
 	endTime = time.time()
-	throughput = numPackets/(endTime-startTime)
-	print("Total packets dropped: ", dropped1.value)
+
+	totalPcktsDropped = 0
+	for i in range(numClients):
+		totalPcktsDropped += droppedarr[i].value
+
+	throughput = (numPackets*numClients)/(endTime-startTime)
+	print("Total packets dropped: ", totalPcktsDropped)
 	print("Time elapsed: ", endTime-startTime)
-	print("Throughput: ", numPackets/(endTime-startTime), "Per second")
+	print("Throughput: ", throughput, "Per second")
 	print("")
 
-	return dropped1.value, numPackets/(endTime-startTime)
+	return totalPcktsDropped, throughput
 
 if __name__ == "__main__":
 	print("Network Traffic simulator\n")
@@ -137,11 +192,27 @@ if __name__ == "__main__":
 	thruputError = []
 	# manager = Manager()
 	numPackets = 200
+	numClients = 0
+	if(len(sys.argv) == 1):
+		numClients = input("Enter number of clients: ")
+
+		while numClients.isdigit() == False:
+			print("Number of clients must be a positive integer")
+			print("You entered type: ", type(numClients))
+			numClients = input("Enter number of clients: ")
+	else:
+		numClients = sys.argv[1]
+		while numClients.isdigit() == False:
+			print("Number of clients must be a positive integer")
+			print("You entered type: ", type(numClients))
+			numClients = input("Enter number of clients: ")
+
+	numClients = int(numClients)
 
 	print("Simulating ", numTrials, " runs")
 	for i in range(numTrials):
 		print("Run ", i)
-		drpPkt, throughput = Traffic(numPackets)
+		drpPkt, throughput = Traffic(numPackets, numClients)
 
 		#Packet loss info
 		packetDroparr.append(drpPkt)		
@@ -151,7 +222,7 @@ if __name__ == "__main__":
 		ecnError.append(1.64 * Sn(pktDrop, avgPktDrop, i+1)/sqrt(i+1))
 
 		#Percent Package loss info
-		pktDrpPerarr.append((drpPkt/numPackets)*100)
+		pktDrpPerarr.append((drpPkt/(numPackets*numClients))*100)
 		pktDrpPerbar = sum(pktDrpPerarr)/(i+1)
 		pktDrpPer.append(pktDrpPerbar)
 		avgPktDropPer = sum(pktDrpPer)/(i+1)
