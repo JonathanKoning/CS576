@@ -97,7 +97,7 @@ def Sn(x, Xbar, n):
 
 
 
-def Traffic(numPackets, numClients):
+def Traffic(numPackets, numClients, clientspeed, serverspeed):
 	manager = Manager()
 	#Set up client specific values
 	clientqueuearr = []
@@ -112,42 +112,16 @@ def Traffic(numPackets, numClients):
 		
 		throttlearr.append(manager.Value('i', 0))
 		droppedarr.append(manager.Value('i', 0))
-		clientarr.append(client(20, throttlearr[i], numPackets))
+		clientarr.append(client(clientspeed, throttlearr[i], numPackets))
 		serverqueuearr.append(manager.Queue())
-
-	# throttle1 = manager.Value('i', 0) 	#Shared throttle value
-	# throttle2 = manager.Value('i', 0)
-	# dropped1 = manager.Value('i', 0)	#Shared number of dropped packets
-	# clientqueue1 = manager.Queue()
-	# clientqueue2 = manager.Queue()
-	
-	# clientqueuearr = [clientqueue1, clientqueue2]
-	# throttlearr = [throttle1, throttle2]
-
-
-	# for i in range(numPackets):
-	# 	clientqueue1.put(i)
-	# 	clientqueue2.put(i)
-	
-	
-
-	
-
-
-	#Set up server specific values
-	# serverqueue1 = manager.Queue()
-	# serverqueue2 = manager.Queue()
-
-	# serverqueuearr = []
-	# serverqueuearr.append(serverqueue1)
-	# serverqueuearr.append(serverqueue2)
 	
 	
 	threshold = manager.Value('i', 14)
 	maxlength = manager.Value('i', 30)
 
+	
 	#create server
-	s1 = server(32, threshold)
+	s1 = server(serverspeed, threshold)
 
 	#Create processes
 	server1 = Process(target=s1.listen, args=(throttlearr, clientqueuearr, serverqueuearr, numClients))
@@ -179,7 +153,7 @@ def Traffic(numPackets, numClients):
 
 if __name__ == "__main__":
 	print("Network Traffic simulator\n")
-	numTrials = 10
+	numTrials = 15
 	packetDroparr = []
 	pktDrop = []
 	ecnError = []
@@ -191,6 +165,8 @@ if __name__ == "__main__":
 	thruput = []
 	thruputError = []
 	# manager = Manager()
+	clientspeed = 20
+	
 	numPackets = 200
 	numClients = 0
 	if(len(sys.argv) == 1):
@@ -209,10 +185,12 @@ if __name__ == "__main__":
 
 	numClients = int(numClients)
 
+	serverspeed = 0.8 *(numClients*numPackets)
+
 	print("Simulating ", numTrials, " runs")
 	for i in range(numTrials):
 		print("Run ", i)
-		drpPkt, throughput = Traffic(numPackets, numClients)
+		drpPkt, throughput = Traffic(numPackets, numClients, clientspeed, serverspeed)
 
 		#Packet loss info
 		packetDroparr.append(drpPkt)		
